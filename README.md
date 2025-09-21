@@ -1,1 +1,1 @@
-# SberAiChallenge
+# SberAiChallenge repo
