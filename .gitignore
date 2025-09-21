@@ -1,3 +1,5 @@
-src/ctr_sample_submission.csv
-src/ctr_test.csv
-src/ctr_train.csv
+task1/src/ctr_sample_submission.csv
+task1/src/ctr_test.csv
+task1/src/ctr_train.csv
+task2/train/
+task2/train.tar.gz
