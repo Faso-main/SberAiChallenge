@@ -221,57 +221,6 @@ def main():
     
     print(f'Best Validation F1: {best_f1:.4f}')
 
-def predict_test_set(model_path, test_dir):
-    """Создает submission файл для тестовых данных"""
-    # Загружаем модель
-    model = create_model(num_classes=6)
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model = model.to(device)
-    model.eval()
-    
-    # Создаем трансформации для теста
-    test_transform = val_transform
-    
-    # Получаем список всех тестовых изображений
-    test_files = [f for f in os.listdir(test_dir) 
-                 if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-    test_files.sort()  # Сортируем для воспроизводимости
-    
-    print(f"Found {len(test_files)} test images")
-    
-    predictions = []
-    
-    with torch.no_grad():
-        for filename in tqdm(test_files, desc='Processing test images'):
-            img_path = os.path.join(test_dir, filename)
-            
-            try:
-                image = Image.open(img_path).convert('RGB')
-                image = test_transform(image).unsqueeze(0).to(device)
-                
-                output = model(image)
-                _, pred = torch.max(output, 1)
-                
-                predictions.append(pred.item())
-            except Exception as e:
-                print(f"Error processing {filename}: {e}")
-                predictions.append(0)  # Default to Bear
-    
-    # Создаем submission файл с правильным форматом
-    result_df = pd.DataFrame({
-        'id': range(len(predictions)),
-        'label': predictions
-    })
-    
-    # Сохраняем файл
-    result_df.to_csv('task2/submission.csv', index=False)
-    print(f'Submission file created with {len(result_df)} predictions')
-    
-    # Проверяем файл
-    verify_submission_file('task2/submission.csv')
-    
-    return result_df
-
 def verify_submission_file(filename):
     """Проверяет корректность submission файла"""
     try:
@@ -295,14 +244,85 @@ def verify_submission_file(filename):
         print(f"Error verifying submission file: {e}")
         return False
 
+def predict_test_set(model_path, test_dir, template_csv):
+    """Создает submission файл на основе шаблона с именами файлов"""
+    # Загружаем модель
+    model = create_model(num_classes=6)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model = model.to(device)
+    model.eval()
+    
+    # Загружаем шаблон
+    template_df = pd.read_csv(template_csv)
+    print(f"Template columns: {template_df.columns.tolist()}")
+    print(f"Number of images in template: {len(template_df)}")
+    
+    # Создаем трансформации для теста
+    test_transform = val_transform
+    
+    predictions = []
+    processed_files = []
+    
+    with torch.no_grad():
+        for idx, row in tqdm(template_df.iterrows(), total=len(template_df), desc='Processing test images'):
+            filename = row['filename']
+            img_path = os.path.join(test_dir, filename)
+            
+            try:
+                if os.path.exists(img_path):
+                    image = Image.open(img_path).convert('RGB')
+                    image = test_transform(image).unsqueeze(0).to(device)
+                    
+                    output = model(image)
+                    _, pred = torch.max(output, 1)
+                    
+                    predictions.append(pred.item())
+                    processed_files.append(filename)
+                else:
+                    print(f"File not found: {img_path}")
+                    predictions.append(0)  # Default to Bear
+                    processed_files.append(filename)
+            except Exception as e:
+                print(f"Error processing {filename}: {e}")
+                predictions.append(0)  # Default to Bear
+                processed_files.append(filename)
+    
+    # Создаем submission файл в правильном формате
+    result_df = pd.DataFrame({
+        'id': range(len(predictions)),
+        'label': predictions
+    })
+    
+    # Сохраняем файл
+    result_df.to_csv('task2/submission.csv', index=False)
+    print(f'Submission file created with {len(result_df)} predictions')
+    
+    # Также сохраняем версию с именами файлов для отладки
+    debug_df = pd.DataFrame({
+        'id': range(len(predictions)),
+        'filename': processed_files,
+        'label': predictions
+    })
+    debug_df.to_csv('task2/submission_debug.csv', index=False)
+    print('Debug file with filenames created: task2/submission_debug.csv')
+    
+    # Проверяем файл
+    verify_submission_file('task2/submission.csv')
+    
+    return result_df
+
 if __name__ == '__main__':
     # 1. Обучение модели
     print("Starting training...")
-    main()
+    #main()
     
     # 2. Предсказание на тестовых данных
     print("\nStarting prediction on test set...")
-    submission = predict_test_set('task2/best_model.pth', 'task2/test/')
+    submission = predict_test_set(
+        'task2/best_model.pth', 
+        'task2/test/',
+        'path/to/your/template.csv'  # Укажите путь к вашему файлу с именами
+    )
     
     print("\nPipeline completed successfully!")
     print("Final submission file: task2/result_task2_21_9_25.csv")
